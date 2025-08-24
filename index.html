@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Moon Phase Tracker • Space Apps</title>
+  <meta name="description" content="Simple moon phase tracker: today + next 7 days." />
+ 
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>🌙 Moon Phase Tracker</h1>
+        <div class="subtitle">Today & next 7 days • Uses a simple astronomical approximation</div>
+      </div>
+      <div class="actions">
+        <span id="tz" class="pill" title="Your local timezone"></span>
+        <button id="showNext">Next 7 Days</button>
+      </div>
+    </header>
+
+    <main style="margin-top:16px;display:grid;gap:16px">
+      <section class="card today" aria-labelledby="today-heading">
+        <div class="moon" id="today-emoji" aria-hidden="true">🌑</div>
+        <div class="meta">
+          <div id="today-heading" class="label">Today</div>
+          <div id="today-date" class="muted">—</div>
+          <div><span id="today-label">—</span> • <span id="illum">—</span> illuminated</div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="forecast-heading">
+        <div class="label" id="forecast-heading" style="margin-bottom:8px">Next 7 Days</div>
+        <div id="forecast" class="grid" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <footer>
+      <div>Built for NASA Space Apps pre‑selection • #cl-sp-webdev</div>
+      <div>By <a href="#" rel="noopener">you ✨</a> • Local time: <span id="now"></span></div>
+    </footer>
+  </div>
+
+  <script>
+    // ——— Moon phase core ———
+    // Based on synodic month average and a reference new moon.
+    const SYNODIC = 29.530588853; // days
+    const EPOCH_JD = 2451550.1;   // 2000-01-06 18:14 UT approx new moon
+
+    function toJulian(date){
+      // Convert a JS Date (local time) to Julian Day (UT). We'll convert to UTC components.
+      const ms = date.getTime();
+      const jd = (ms / 86400000) + 2440587.5; // Unix epoch to JD
+      return jd;
+    }
+
+    function moonAge(date){
+      const jd = toJulian(date);
+      let age = (jd - EPOCH_JD) % SYNODIC;
+      if (age < 0) age += SYNODIC;
+      return age; // in days since new moon
+    }
+
+    function illuminationFraction(age){
+      const phase = age / SYNODIC; // 0..1
+      // Fraction of the Moon illuminated (approx):
+      return (1 - Math.cos(2 * Math.PI * phase)) / 2; // 0..1
+    }
+
+    function phaseIndex(age){
+      // Map to 8-phase index 0..7
+      const idx = Math.floor(((age / SYNODIC) * 8) + 0.5) % 8;
+      return idx;
+    }
+
+    const PHASES = [
+      { name: "New Moon", emoji: "🌑" },
+      { name: "Waxing Crescent", emoji: "🌒" },
+      { name: "First Quarter", emoji: "🌓" },
+      { name: "Waxing Gibbous", emoji: "🌔" },
+      { name: "Full Moon", emoji: "🌕" },
+      { name: "Waning Gibbous", emoji: "🌖" },
+      { name: "Last Quarter", emoji: "🌗" },
+      { name: "Waning Crescent", emoji: "🌘" }
+    ];
+
+    // ——— UI helpers ———
+    function formatDate(d){
+      return d.toLocaleDateString(undefined, { weekday:'long', year:'numeric', month:'short', day:'numeric' });
+    }
+    function pad(n){return String(n).padStart(2,'0')}
+
+    function atLocalNoon(date){
+      const d = new Date(date);
+      d.setHours(12,0,0,0); // reduce timezone edge issues
+      return d;
+    }
+
+    function computeFor(date){
+      const d = atLocalNoon(date);
+      const age = moonAge(d);
+      const illum = illuminationFraction(age);
+      const idx = phaseIndex(age);
+      return { date:d, age, illum, idx, ...PHASES[idx] };
+    }
+
+    function renderToday(){
+      const now = new Date();
+      const info = computeFor(now);
+      document.getElementById('today-emoji').textContent = info.emoji;
+      document.getElementById('today-date').textContent = formatDate(info.date);
+      document.getElementById('today-label').textContent = info.name;
+      document.getElementById('illum').textContent = Math.round(info.illum * 100) + '%';
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local';
+      document.getElementById('tz').textContent = tz;
+      const clock = () => {
+        const n = new Date();
+        document.getElementById('now').textContent = `${pad(n.getHours())}:${pad(n.getMinutes())}:${pad(n.getSeconds())}`;
+      };
+      clock();
+      setInterval(clock, 1000);
+    }
+
+    function renderNext7(){
+      const container = document.getElementById('forecast');
+      container.innerHTML = '';
+      const today = new Date();
+      for (let i=1;i<=7;i++){
+        const d = new Date(today);
+        d.setDate(today.getDate()+i);
+        const info = computeFor(d);
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+        tile.innerHTML = `
+          <div class="moon" aria-hidden="true">${info.emoji}</div>
+          <div class="label">${info.name}</div>
+          <div class="muted" style="text-align:center">${formatDate(info.date)}</div>
+          <div class="muted">${Math.round(info.illum*100)}% lit</div>
+        `;
+        container.appendChild(tile);
+      }
+    }
+
+    document.getElementById('showNext').addEventListener('click', renderNext7);
+    renderToday();
+  </script>
+</body>
+</html>
